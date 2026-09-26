@@ -96,9 +96,9 @@ export function originName(rng) {
 export function numberWord(n) {
   const w = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen', 'Twenty'];
   if (n <= 20) return w[n];
-  if (n < 30) return 'Twenty-' + w[n - 20];
-  if (n < 40) return 'Thirty-' + w[n - 30];
-  return 'Forty';
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty'];
+  const t = tens[Math.floor(n / 10)] || 'Forty', r = n % 10;
+  return r ? `${t}-${w[r]}` : t;
 }
 
 export function habitatName(rng) {

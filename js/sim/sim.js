@@ -158,7 +158,9 @@ export function computeSupply(w) {
   const eduAvg = pop ? w.districts.reduce((a, d) => a + d.edu * d.pop, 0) / pop : 0;
   let live = 0; for (const s of w.structures) if (s.removed === null && s.status !== 'ruin') live++;
   const upkeep = live * 0.012 + (w.program ? 1.2 : 0);
-  const budget = Math.max(0, industry * eFactor * (0.55 + 0.45 * eduAvg) * (w.trade === 'open' ? 1.15 : 1) - upkeep);
+  // labour always produces something, so a collapsed grid can be rebuilt out of the ruins
+  const floor = 0.9 + pop / 50000;
+  const budget = Math.max(floor, industry * eFactor * (0.55 + 0.45 * eduAvg) * (w.trade === 'open' ? 1.15 : 1) - upkeep);
   const housing = w.districts.reduce((a, d) => a + (byD[d.id] ? byD[d.id].housing : 0), 0);
   // inequality: population-weighted spread of wealth
   const avgW = pop ? w.districts.reduce((a, d) => a + d.wealth * d.pop, 0) / pop : 0.5;
@@ -194,9 +196,10 @@ function updateWealthAndSentiment(w, S, rng) {
       const dist = Math.abs(ctrl.ideology.communal - w.culture.communal) + Math.abs(ctrl.ideology.tradition - (1 - w.culture.technocratic)) * 0.5;
       st -= 0.08 * dist;
       if (ctrl.ideology.control < 0.3) st -= 0.03;
+      if (rul && rul !== ctrl && rul.rivals.includes(ctrl.id)) st -= 0.04;
     }
     d.sentiment += (clamp(st, 0, 1) - d.sentiment) * 0.3;
-    if (d.sentiment < 0.36) d.unrest = clamp(d.unrest + 0.1 + (0.36 - d.sentiment), 0, 1.6);
+    if (d.sentiment < 0.4) d.unrest = clamp(d.unrest + 0.1 + (0.4 - d.sentiment) * 1.5, 0, 1.6);
     else d.unrest = Math.max(0, d.unrest - 0.12);
   }
 }
@@ -359,7 +362,7 @@ function crises(w, S, rng) {
     let n = 0;
     for (const s of w.structures) {
       if (n >= 6) break;
-      if (isLive(s) && STRUCT[s.type].cat === 'housing' && !s.addon && rng.chance(0.35)) { addLayer(w, s, { addon: 'rooftop', note: `Rooftop farm planted during the ${ev.title}.`, cause: ev.id }); n++; }
+      if (isLive(s) && STRUCT[s.type].cat === 'housing' && !s.addon && rng.chance(0.35)) { addLayer(w, s, { addon: 'rooftop', note: `Rooftop farm planted during ${the(ev.title)}.`, cause: ev.id }); n++; }
     }
   });
   // ---- blackout
@@ -386,7 +389,7 @@ function crises(w, S, rng) {
     const name = crisisName(rng, 'breach', ordinal(w, 'breach'));
     p.breached = true; p.scar = 'breach';
     const ev = addEvent(w, { type: 'crisis', crisis: 'breach', title: name, text: `Hull pressure failed beneath ${d.name}. The sector was sealed; ${d.pop > 2000 ? 'thousands' : 'hundreds'} were displaced.`, district: d.id, severity: 3, plot: p.id });
-    for (const sid of p.slots) if (sid) { const s = w.structures.find(x => x.id === sid); if (s && isLive(s)) addLayer(w, s, { status: rng.chance(0.6) ? 'ruin' : 'damaged', note: `Wrecked in the ${name}.`, cause: ev.id }); }
+    for (const sid of p.slots) if (sid) { const s = w.structures.find(x => x.id === sid); if (s && isLive(s)) addLayer(w, s, { status: rng.chance(0.6) ? 'ruin' : 'damaged', note: `Wrecked in ${the(name)}.`, cause: ev.id }); }
     const lost = Math.round(d.pop / Math.max(1, d.plots.length) * 0.35);
     d.pop -= lost;
     const dest = activeDistricts(w).filter(x => x !== d); if (dest.length) rng.pick(dest).pop += lost;
@@ -397,14 +400,14 @@ function crises(w, S, rng) {
   for (const s of w.structures) {
     if (!isLive(s) || s.type !== 'farm') continue;
     const p = w.plots[s.plot];
-    if (p.soil < 0.17 && p.scar !== 'blight' && rng.chance(0.04)) {
+    if (p.soil < 0.15 && p.scar !== 'blight' && rng.chance(0.025)) {
       const d = w.districts[p.district];
       let ev = c.blightEv && w.year - c.blightEv.year < 20 ? c.blightEv : null;
       let name;
       if (ev) { name = ev.title; ev.text += ` It spread to ${d.name} in Year ${w.year}.`; d.history.push({ year: w.year, text: `The ${name} spread here; a field died.`, event: ev.id }); }
       else { name = crisisName(rng, 'blight', ordinal(w, 'blight')); ev = c.blightEv = addEvent(w, { type: 'crisis', crisis: 'blight', title: name, text: `Exhausted soil in ${d.name} collapsed into a dead field. The plot will not grow food again for generations.`, district: d.id, severity: 2, plot: p.id }); }
       p.scar = 'blight'; p.soil = 0.05;
-      for (const sid of p.slots) if (sid) { const x = w.structures.find(y => y.id === sid); if (x && isLive(x) && x.type === 'farm') addLayer(w, x, { status: 'abandoned', note: `Left fallow after the ${name}.`, cause: ev.id }); }
+      for (const sid of p.slots) if (sid) { const x = w.structures.find(y => y.id === sid); if (x && isLive(x) && x.type === 'farm') addLayer(w, x, { status: 'abandoned', note: `Left fallow after ${the(name)}.`, cause: ev.id }); }
       grieve(w, livingFactions(w).find(f => f.arch === 'cultivators'), `The soil of ${d.name} was worked to death.`);
       break;
     }
@@ -465,7 +468,7 @@ function politics(w, S, rng) {
       d.lastProtest = w.year;
       addEvent(w, { type: 'protest', title: `Protests in ${d.name}`, text: `Crowds gather against ${cur.name} over ${grievanceCause(w, d, S)}.`, district: d.id, faction: cur.id, severity: 1 });
     }
-    if (d.unrest > 1.25 && !(d.lastRevolt > w.year - 15)) {
+    if (d.unrest > 1.25 && !(d.lastRevolt > w.year - 25)) {
       d.lastRevolt = w.year;
       // challenger: strongest non-controlling faction
       const chal = livingFactions(w).filter(f => f.id !== d.ctrl).sort((a, b) => d.infl[b.id] - d.infl[a.id])[0];
@@ -478,7 +481,7 @@ function politics(w, S, rng) {
   if (rul) {
     const chal = livingFactions(w).filter(f => f !== rul).sort((a, b) => b.power - a.power)[0];
     const meanSent = S.pop ? w.districts.reduce((a, d) => a + d.sentiment * d.pop, 0) / S.pop : 0.5;
-    if (chal && chal.power > rul.power * 0.9 && meanSent < 0.42 && rng.chance(0.25) && !(w.lastRevolution > w.year - 30)) revolution(w, rng, rul, chal);
+    if (chal && chal.power > rul.power * 0.85 && meanSent < 0.47 && rng.chance(0.25) && !(w.lastRevolution > w.year - 30)) revolution(w, rng, rul, chal);
   }
   // old barricades harden into boundary walls
   for (const s of w.structures) if (s.type === 'barricade' && s.status === 'active' && w.year - s.built > 30 && rng.chance(0.1)) addLayer(w, s, { type: 'wall', note: `Nobody removed the barricade. After thirty years it is simply where ${w.districts[s.district].name} ends.` });
@@ -506,26 +509,26 @@ function revolt(w, S, rng, d, cur, chal) {
     if (n >= 3) break;
     const si = p.slots.findIndex(s => s === null);
     if (si < 0) { p.scar = p.scar || 'barricade'; n++; continue; }
-    const s = { id: nextId(w), type: 'barricade', origType: 'barricade', plot: p.id, slot: si, district: d.id, built: w.year, by: chal.id, removed: null, status: 'active', layers: [{ year: w.year, type: 'barricade', status: 'active', note: `Thrown up during the ${name}.`, cause: ev.id }] };
+    const s = { id: nextId(w), type: 'barricade', origType: 'barricade', plot: p.id, slot: si, district: d.id, built: w.year, by: chal.id, removed: null, status: 'active', layers: [{ year: w.year, type: 'barricade', status: 'active', note: `Thrown up during ${the(name)}.`, cause: ev.id }] };
     p.slots[si] = s.id; w.structures.push(s); n++;
   }
   const civic = w.structures.filter(s => s.district === d.id && isLive(s) && STRUCT[s.type].cat === 'civic');
   if (success) {
-    d.ctrl = chal.id; d.ctrlSince = w.year;
-    for (const s of civic) addLayer(w, s, { type: chal.ideology.control > 0.5 ? 'assembly' : 'garrison', status: 'active', by: chal.id, note: `Seized and repurposed by ${chal.name} in the ${name}.`, cause: ev.id });
-    if (rng.chance(0.45)) renameDistrict(w, rng, d, chal.arch === 'faith' ? sacredRename(rng, d.core) : chal.ideology.control < 0.4 ? authoritarianRename(rng, d.core, shortFaction(chal.name)) : revolutionaryRename(rng, d.core), `Renamed after the ${name}.`);
-    grieve(w, cur, `Driven out of ${d.name} in the ${name}.`, chal.id);
+    d.ctrl = chal.id; d.ctrlSince = w.year; d.infl[cur.id] *= 0.5; d.infl[chal.id] += 0.15;
+    for (const s of civic) addLayer(w, s, { type: chal.ideology.control > 0.5 ? 'assembly' : 'garrison', status: 'active', by: chal.id, note: `Seized and repurposed by ${chal.name} in ${the(name)}.`, cause: ev.id });
+    if (rng.chance(0.45)) renameDistrict(w, rng, d, chal.arch === 'faith' ? sacredRename(rng, d.core) : chal.ideology.control < 0.4 ? authoritarianRename(rng, d.core, shortFaction(chal.name)) : revolutionaryRename(rng, d.core), `Renamed after ${the(name)}.`);
+    grieve(w, cur, `Driven out of ${d.name} in ${the(name)}.`, chal.id);
     d.sentiment = Math.min(0.6, d.sentiment + 0.2);
     // large districts can split along the barricade line
     if (d.plots.length >= 8 && w.districts.length < 16 && rng.chance(0.35)) splitDistrict(w, rng, d, cur, chal, name, ev.id);
   } else {
-    for (const s of civic) if (rng.chance(0.6)) addLayer(w, s, { status: 'fortified', note: `Fortified during the ${name}.`, cause: ev.id });
-    const g = place(w, rng, d, 'garrison', w.year, cur.id, `Garrison built by ${cur.name} after the ${name}.`, ev.id);
+    for (const s of civic) if (rng.chance(0.6)) addLayer(w, s, { status: 'fortified', note: `Fortified during ${the(name)}.`, cause: ev.id });
+    const g = place(w, rng, d, 'garrison', w.year, cur.id, `Garrison built by ${cur.name} after ${the(name)}.`, ev.id);
     grieve(w, chal, `Our rising in ${d.name} was put down by ${cur.name}.`, cur.id);
     d.infl[chal.id] *= 0.6;
     d.sentiment = Math.max(0.25, d.sentiment); d.unrest = 0;
   }
-  if (rng.chance(0.5)) place(w, rng, d, 'memorial', w.year + 2, success ? chal.id : cur.id, `Memorial to the dead of the ${name}.`, ev.id);
+  if (rng.chance(0.5)) place(w, rng, d, 'memorial', w.year + 2, success ? chal.id : cur.id, `Memorial to the dead of ${the(name)}.`, ev.id);
 }
 function splitDistrict(w, rng, d, cur, chal, name, cause) {
   // BFS from a border plot to peel off roughly a third of the district
@@ -534,10 +537,10 @@ function splitDistrict(w, rng, d, cur, chal, name, cause) {
   const taken = new Set([start.id]); const q = [start];
   while (q.length && taken.size < want) { const p = q.shift(); for (const n of neighbors(w, p)) if (n.district === d.id && !taken.has(n.id)) { taken.add(n.id); q.push(n); } }
   if (taken.size < 2) return;
-  const nd = newDistrict(w, rng, coreName(rng) + ' ' + rng.pick(['Barricades', 'Redoubt', 'Hold', 'Quarter']), 'residential', [...taken], d.culture, `Split from ${d.name} along the barricade line of the ${name}.`);
+  const nd = newDistrict(w, rng, coreName(rng) + ' ' + rng.pick(['Barricades', 'Redoubt', 'Hold', 'Quarter']), 'residential', [...taken], d.culture, `Split from ${d.name} along the barricade line of ${the(name)}.`);
   nd.ctrl = cur.id; nd.infl = { ...d.infl }; nd.infl[cur.id] = Math.max(nd.infl[cur.id], 0.5);
   nd.pop = Math.round(d.pop * taken.size / (d.plots.length + taken.size)); d.pop -= nd.pop;
-  addEvent(w, { type: 'border', title: `${nd.name} splits from ${d.name}`, text: `The barricade line of the ${name} became a permanent boundary; ${cur.name} kept the far side.`, district: nd.id, faction: cur.id, severity: 2, cause });
+  addEvent(w, { type: 'border', title: `${nd.name} splits from ${d.name}`, text: `The barricade line of ${the(name)} became a permanent boundary; ${cur.name} kept the far side.`, district: nd.id, faction: cur.id, severity: 2, cause });
 }
 function newDistrict(w, rng, name, kind, plotIds, culture, originText) {
   const d = { id: w.districts.length, name, core: name.split(' ').filter(x => !['Little','New','The'].includes(x))[0] || name, kind, founded: w.year, names: [{ year: w.year, name, reason: originText }], culture, pop: 0, wealth: 0.4, sentiment: 0.55, edu: 0.3, health: 0.5, ctrl: -1, infl: {}, damage: 0, abandoned: false, plots: [], history: [{ year: w.year, text: originText }], unrest: 0, supply: { food: 1, water: 1, energy: 1 }, overcrowd: 0, services: {} };
@@ -563,17 +566,17 @@ function revolution(w, rng, rul, chal) {
     if (d.abandoned) continue;
     d.infl[chal.id] = (d.infl[chal.id] || 0.1) + 0.25; d.infl[rul.id] = (d.infl[rul.id] || 0.1) * 0.4;
     if (d.ctrl === rul.id && rng.chance(0.7)) d.ctrl = chal.id;
-    if (rng.chance(0.3)) renameDistrict(w, rng, d, chal.arch === 'faith' ? sacredRename(rng, d.core) : chal.ideology.control < 0.4 ? authoritarianRename(rng, d.core, shortFaction(chal.name)) : revolutionaryRename(rng, d.core), `Renamed in the ${name}.`);
+    if (rng.chance(0.3)) renameDistrict(w, rng, d, chal.arch === 'faith' ? sacredRename(rng, d.core) : chal.ideology.control < 0.4 ? authoritarianRename(rng, d.core, shortFaction(chal.name)) : revolutionaryRename(rng, d.core), `Renamed in ${the(name)}.`);
     d.sentiment = Math.min(0.7, d.sentiment + 0.15); d.unrest = 0;
   }
   for (const s of w.structures) {
     if (!isLive(s) || STRUCT[s.type].cat !== 'civic' || s.by !== rul.id) continue;
     const r = rng.next();
-    if (r < 0.5) addLayer(w, s, { type: chal.ideology.control > 0.5 ? 'assembly' : 'garrison', by: chal.id, status: 'active', note: `Taken over by ${chal.name} in the ${name}.`, cause: ev.id });
-    else if (r < 0.75) addLayer(w, s, { type: 'museum', by: chal.id, status: 'active', note: `The old ${STRUCT[s.type].label.toLowerCase()} of the ${rul.name} was turned into a museum after the ${name}.`, cause: ev.id });
-    else addLayer(w, s, { type: 'housing', by: chal.id, status: 'active', note: `Converted into housing after the ${name}.`, cause: ev.id });
+    if (r < 0.5) addLayer(w, s, { type: chal.ideology.control > 0.5 ? 'assembly' : 'garrison', by: chal.id, status: 'active', note: `Taken over by ${chal.name} in ${the(name)}.`, cause: ev.id });
+    else if (r < 0.75) addLayer(w, s, { type: 'museum', by: chal.id, status: 'active', note: `The old ${STRUCT[s.type].label.toLowerCase()} of the ${rul.name} was turned into a museum after ${the(name)}.`, cause: ev.id });
+    else addLayer(w, s, { type: 'housing', by: chal.id, status: 'active', note: `Converted into housing after ${the(name)}.`, cause: ev.id });
   }
-  grieve(w, rul, `Overthrown in the ${name}.`, chal.id);
+  grieve(w, rul, `Overthrown in ${the(name)}.`, chal.id);
   chal.power += 0.2;
 }
 
@@ -601,14 +604,15 @@ function autonomousBuilding(w, S, rng) {
   let built = 0;
   for (const nd of needs) {
     if (built >= 4) break;
-    const cost = (COST[nd.what] || 1) * (1 + S.pop / 250000);
+    let cost = (COST[nd.what] || 1) * (1 + S.pop / 250000);
+    if (nd.urgency > 2.5) cost *= 0.5; // emergency works: everything else stops
     if (budget < cost) continue;
     const d = chooseDistrict(w, S, rng, nd.what);
     if (!d) { w.spacePressure = (w.spacePressure || 0) + 1; continue; }
     const by = STRUCT[nd.what].cat === 'housing' ? rul.id : sponsor(w, nd.what);
     let note;
     const src = d.inflow && Object.entries(d.inflow).sort((a, b) => b[1] - a[1])[0];
-    if (cr && (STRUCT[nd.what].cat === STRUCTCAT_FOR_CRISIS[cr.crisis] || nd.urgency > 2)) note = `Built in Year ${w.year} after the ${cr.title}.`;
+    if (cr && (STRUCT[nd.what].cat === STRUCTCAT_FOR_CRISIS[cr.crisis] || nd.urgency > 2)) note = `Built in Year ${w.year} after ${the(cr.title)}.`;
     else if (STRUCT[nd.what].cat === 'housing' && src && src[1] > 300 && w.districts[src[0]]) note = `Expanded after migration from ${w.districts[src[0]].name}.`;
     else note = defaultNote(w, nd.what, S);
     const s = placeOrDensify(w, rng, d, nd.what, by, note, cr ? cr.id : null);
@@ -617,6 +621,18 @@ function autonomousBuilding(w, S, rng) {
   w.reserve = clamp(budget, 0, 12);
   // obsolete infrastructure gets converted when there is demand for space
   if (w.spacePressure > 3) { convertObsolete(w, S, rng, rul); w.spacePressure = 0; }
+  // crowded districts squat and rebuild their own derelicts
+  const crowded = activeDistricts(w).filter(d => d.overcrowd > 0.08);
+  if (crowded.length && rng.chance(0.5)) {
+    const d = rng.pick(crowded);
+    const der = w.structures.filter(x => x.district === d.id && x.removed === null && (x.status === 'abandoned' || x.status === 'ruin' || x.status === 'obsolete') && !w.plots[x.plot].sacred && !w.plots[x.plot].breached);
+    if (der.length) {
+      const x = rng.pick(der); const was = STRUCT[x.origType].label.toLowerCase();
+      const cr2 = recentCrisis(w, 10);
+      addLayer(w, x, { type: 'housing', status: 'active', by: rul.id, note: cr2 ? `Emergency housing built into the shell of the old ${was} after ${the(cr2.title)}. The old walls still set the shape of the block.` : `Squatters from overcrowded ${d.name} rebuilt the derelict ${was} as housing; its outline survives in the block plan.`, cause: cr2 ? cr2.id : null });
+      addEvent(w, { type: 'convert', title: `Old ${was} becomes housing`, text: `In ${d.name}, the derelict ${was} was rebuilt as homes.`, district: d.id, severity: 1 });
+    }
+  }
 }
 const STRUCTCAT_FOR_CRISIS = { water: 'water', famine: 'food', blackout: 'energy', plague: 'health', breach: 'housing' };
 function defaultNote(w, type, S) {
@@ -772,7 +788,7 @@ function migrationWaves(w, S, rng) {
   const wave = { origin, size, year: w.year };
   const rul = ruler(w);
   // player may be asked; otherwise ruler decides by openness
-  if (w.year - w.lastIntervention >= 12 && !w.pending) { w.pendingWave = wave; return; }
+  if (w.year - w.lastIntervention >= 20 && !w.pending) { w.pendingWave = wave; return; }
   if (rul && rul.ideology.openness > 0.45) admitWave(w, rng, wave, `${rul.name} admitted them.`); else refuseWave(w, rng, wave, `${rul.name} turned the ships away.`);
 }
 export function admitWave(w, rng, wave, how) {
@@ -829,10 +845,10 @@ function religion(w, S, rng) {
   const faith = livingFactions(w).find(f => f.arch === 'faith');
   const trauma = traumaLevel(w);
   const meanEdu = S.eduAvg; const meanSent = S.pop ? w.districts.reduce((a, d) => a + d.sentiment * d.pop, 0) / S.pop : 0.5;
-  if (!faith && w.year > 20 && trauma > 0.5 && meanEdu < 0.5 && rng.chance(0.06 + 0.1 * w.culture.piety)) {
+  if (!faith && w.year > 20 && trauma > 0.45 && meanEdu < 0.62 && rng.chance(0.06 + 0.1 * w.culture.piety)) {
     const ev0 = w.events.slice().reverse().find(e => e.severity >= 3);
     const home = ev0 && ev0.district >= 0 ? ev0.district : rng.pick(activeDistricts(w)).id;
-    const f = addFaction(w, rng, 'faith', w.year, `Arose among survivors of the ${ev0 ? ev0.title : 'dark years'} in ${w.districts[home].name}.`, { home, purpose: ev0 ? ev0.id : null });
+    const f = addFaction(w, rng, 'faith', w.year, `Arose among survivors of ${ev0 ? the(ev0.title) : 'the dark years'} in ${w.districts[home].name}.`, { home, purpose: ev0 ? ev0.id : null });
     w.districts[home].infl[f.id] = 0.35;
     const ev = addEvent(w, { type: 'faction', title: `${f.name} founded`, text: f.origin, district: home, faction: f.id, severity: 2 });
     if (w.year - w.lastIntervention >= 12 && !w.pending) w.pendingRecognition = { faction: f.id, event: ev.id };
@@ -845,7 +861,7 @@ function religion(w, S, rng) {
       const p = w.plots[s.plot]; p.sacred = true;
       const was = STRUCT[s.origType].label.toLowerCase();
       const purpose = faith.purpose ? w.events.find(e => e.id === faith.purpose) : null;
-      addLayer(w, s, { type: 'temple', status: 'sacred', by: faith.id, note: `The dead ${was} was consecrated by the ${faith.name}${purpose ? ` in memory of the ${purpose.title}` : ''}.`, cause: faith.purpose });
+      addLayer(w, s, { type: 'temple', status: 'sacred', by: faith.id, note: `The dead ${was} was consecrated by the ${faith.name}${purpose ? ` in memory of ${the(purpose.title)}` : ''}.`, cause: faith.purpose });
       addEvent(w, { type: 'sacred', title: `${STRUCT[s.origType].label} consecrated`, text: `In ${w.districts[s.district].name}, the ${faith.name} made a shrine of the old ${was}.`, district: s.district, faction: faith.id, severity: 1 });
     } else if (rng.chance(0.3)) {
       const d = rng.weighted(activeDistricts(w), x => 0.1 + (x.infl[faith.id] || 0));
@@ -854,7 +870,7 @@ function religion(w, S, rng) {
   }
   // rationing council
   if (w.rationing && w.year - w.rationingSince >= 3 && !w.factions.some(f => f.arch === 'rationing' && !f.dissolved)) {
-    const f = addFaction(w, rng, 'rationing', w.year, `Created to administer rationing during the ${(recentCrisis(w, 10) || { title: 'shortage' }).title}.`);
+    const f = addFaction(w, rng, 'rationing', w.year, `Created to administer rationing during ${the((recentCrisis(w, 10) || { title: 'the shortage' }).title)}.`);
     const d = activeDistricts(w).sort((a, b) => b.pop - a.pop)[0];
     d.infl[f.id] = 0.3;
     place(w, rng, d, 'civic', w.year, f.id, `Headquarters of the ${f.name}, set up to administer rationing.`);
@@ -947,11 +963,11 @@ export function applyDecision(w, optionId) {
   }
   else if (K === 'water') {
     if (o === 'ration') { w.rationing = true; w.rationingSince = w.year; mark('Water rationing imposed', 'Every ward receives a fixed allocation.'); }
-    else if (o === 'program') { w.program = { years: 10, kind: 'water' }; w.reserve = (w.reserve || 0) + 6; const d = activeDistricts(w).sort((a, b) => a.supply.water - b.supply.water)[0]; place(w, rng, d, w.tech.recycling ? 'recycler' : 'reservoir', w.year, sponsor(w, 'reservoir'), `Emergency works ordered by the Steward during the ${iv.title}.`, iv.data.event); place(w, rng, d, 'waterplant', w.year + 1, sponsor(w, 'waterplant'), `Emergency works ordered by the Steward during the ${iv.title}.`, iv.data.event); mark('Emergency water programme', 'Industry diverted into water works for a decade.', { district: d.id }); }
+    else if (o === 'program') { w.program = { years: 10, kind: 'water' }; w.reserve = (w.reserve || 0) + 6; const d = activeDistricts(w).sort((a, b) => a.supply.water - b.supply.water)[0]; place(w, rng, d, w.tech.recycling ? 'recycler' : 'reservoir', w.year, sponsor(w, 'reservoir'), `Emergency works ordered by the Steward during ${the(iv.title)}.`, iv.data.event); place(w, rng, d, 'waterplant', w.year + 1, sponsor(w, 'waterplant'), `Emergency works ordered by the Steward during ${the(iv.title)}.`, iv.data.event); mark('Emergency water programme', 'Industry diverted into water works for a decade.', { district: d.id }); }
     else mark('No action on water', 'The districts were left to cope.');
   }
   else if (K === 'famine') {
-    if (o === 'rooftops') { let n = 0; for (const s of w.structures) if (isLive(s) && STRUCT[s.type].cat === 'housing' && !s.addon && n++ < 40) addLayer(w, s, { addon: 'rooftop', note: `Rooftop farm planted under the Steward's decree during the ${iv.title}.`, cause: iv.data.event }); mark('Rooftop farming decree', 'Every flat roof was ordered planted.'); }
+    if (o === 'rooftops') { let n = 0; for (const s of w.structures) if (isLive(s) && STRUCT[s.type].cat === 'housing' && !s.addon && n++ < 40) addLayer(w, s, { addon: 'rooftop', note: `Rooftop farm planted under the Steward's decree during ${the(iv.title)}.`, cause: iv.data.event }); mark('Rooftop farming decree', 'Every flat roof was ordered planted.'); }
     else if (o === 'trade') { w.trade = 'open'; w.culture.openness = clamp(w.culture.openness + 0.1, 0, 1); mark('Docks opened for food', 'External trade opened to import food.'); }
     else { w.rationing = true; w.rationingSince = w.year; mark('Food rationing imposed', 'Fixed rations for every ward.'); }
   }
@@ -994,10 +1010,10 @@ function aging(w, S, rng) {
       if (cat === 'water' || cat === 'energy') addEvent(w, { type: 'failure', title: `${STRUCT[s.type].label} fails in ${w.districts[s.district].name}`, text: `${age} years old and ${scarce ? 'unmaintained' : 'worn out'}.`, district: s.district, severity: 1 });
     }
     // contamination of water infrastructure by neighbouring industry
-    if (cat === 'water' && indNear[s.plot] >= 1 && rng.chance(0.006 * indNear[s.plot])) {
+    if (cat === 'water' && indNear[s.plot] >= 1 && rng.chance(0.005 * indNear[s.plot] * (s.addon === 'enclosed' ? 0.15 : 1))) {
       const d = w.districts[s.district];
       const ev = addEvent(w, { type: 'crisis', crisis: 'contamination', title: `${d.name} contamination`, text: `Industrial runoff poisoned the ${STRUCT[s.type].label.toLowerCase()} in ${d.name}. Sickness followed; the works were sealed off.`, district: d.id, severity: 2 });
-      addLayer(w, s, { status: 'damaged', note: `Contaminated by industrial runoff in Year ${w.year}; enclosed behind a containment shell.`, cause: ev.id, addon: 'enclosed' });
+      addLayer(w, s, { status: 'damaged', note: s.addon === 'enclosed' ? `Contaminated again in Year ${w.year} despite the containment shell.` : `Contaminated by industrial runoff in Year ${w.year}; enclosed behind a containment shell.`, cause: ev.id, addon: 'enclosed' });
       d.health = Math.max(0.1, d.health - 0.2); d.pop = Math.round(d.pop * 0.985);
       grieve(w, w.factions[d.ctrl], `The water of ${d.name} was poisoned while the factories kept running.`);
     }
@@ -1016,8 +1032,11 @@ function aging(w, S, rng) {
     const cost = 0.6 * (1 + S.pop / 250000);
     if (fund < cost || n >= 3) break;
     if (w.plots[s.plot].breached) continue;
+    if (w.year - s.layers[s.layers.length - 1].year < 2) continue;
     fund -= cost; n++;
     addLayer(w, s, { status: 'active', note: s.addon === 'enclosed' ? `Rebuilt inside its containment shell in Year ${w.year}.` : `Repaired in Year ${w.year}.` });
   }
   w.reserve = Math.max(0, (w.reserve || 0) - (S.budget * 0.35 + (w.reserve || 0) - fund));
 }
+
+function the(title) { return /^The /.test(title) ? title.replace(/^The /, 'the ') : 'the ' + title; }
