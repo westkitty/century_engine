@@ -1,0 +1,6 @@
+{
+  "name": "century-engine",
+  "private": true,
+  "scripts": { "test": "node tests/browser.cjs" },
+  "devDependencies": { "playwright": "1.61.1" }
+}
