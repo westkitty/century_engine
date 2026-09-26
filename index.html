@@ -13,6 +13,7 @@
 </head>
 <body>
 <canvas id="world"></canvas>
+<canvas id="labels" aria-hidden="true"></canvas>
 
 <header id="topbar">
   <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
@@ -52,6 +53,7 @@
 <div id="overlay" class="hidden"><div id="overlayBox"><div class="spinner"></div><div id="overlayText">Replaying history…</div></div></div>
 
 <input type="file" id="importFile" accept="application/json,.json" hidden>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

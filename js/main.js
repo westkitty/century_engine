@@ -4,6 +4,13 @@ import { Renderer, fmt } from './render/renderer.js';
 import * as P from './ui/panels.js';
 import { saveLocal, loadLocal, download, exportWorld } from './storage.js';
 
+let Renderer3D;
+try {
+  // r169 requires WebGL2. Dynamic import also preserves fallback on module failure.
+  const probe = document.createElement('canvas').getContext('webgl2');
+  if (probe) { probe.getExtension('WEBGL_lose_context')?.loseContext(); ({ Renderer3D } = await import('./render/renderer3d.js')); }
+} catch (e) { console.warn('3D unavailable; using 2D.', e); }
+
 const $ = (id) => document.getElementById(id);
 const MODES = ['districts', 'control', 'culture', 'sentiment', 'wealth', 'ecology'];
 const MODE_LABEL = { districts: 'Districts', control: 'Control', culture: 'Culture', sentiment: 'Sentiment', wealth: 'Wealth', ecology: 'Ecology' };
@@ -11,7 +18,12 @@ const MODE_LABEL = { districts: 'Districts', control: 'Control', culture: 'Cultu
 class App {
   constructor() {
     this.canvas = $('world');
-    this.renderer = new Renderer(this.canvas);
+    try { this.renderer = Renderer3D ? new Renderer3D(this.canvas) : new Renderer(this.canvas); }
+    catch (e) {
+      console.warn('3D initialization failed; using 2D.', e);
+      const replacement = this.canvas.cloneNode(); this.canvas.replaceWith(replacement); this.canvas = replacement;
+      this.renderer = new Renderer(this.canvas);
+    }
     this.timelines = null; this.branch = null;
     this.viewYear = 1; this.playing = false; this.speed = 3; this.acc = 0;
     this.mode = 'districts'; this.arch = false; this.selection = null;
@@ -160,6 +172,7 @@ class App {
     const { kind, id, extra } = this.panel; const w = this.world; let html = '';
     try {
       switch (kind) {
+        case 'unit': html = P.unitPanel(this, extra); break;
         case 'structure': { const s = w.structures.find(x => x.id === id); html = s ? P.structurePanel(this, s) : ''; break; }
         case 'line': { const l = w.lines.find(x => x.id === id); html = l ? P.linePanel(this, l) : ''; break; }
         case 'plot': html = P.plotPanel(this, id); break;
@@ -186,9 +199,9 @@ class App {
   showIntervention() { if (!this.world.pending) return; this.openPanel('intervention'); this.selection = null; }
   select(hit) {
     this.selection = hit;
-    if (!hit) { if (this.panel && ['structure', 'plot', 'district', 'line'].includes(this.panel.kind)) this.closeSheet(); return; }
+    if (!hit) { if (this.panel && ['structure', 'plot', 'district', 'line', 'unit'].includes(this.panel.kind)) this.closeSheet(); return; }
     if (hit.kind === 'plot') { const did = this.snap.owners[hit.id] - 1; if (did >= 0) { this.selection = { kind: 'district', id: did, plot: hit.id }; this.openPanel('district', did); } else this.openPanel('plot', hit.id); }
-    else this.openPanel(hit.kind, hit.id);
+    else this.openPanel(hit.kind, hit.id, hit);
   }
   // ---------------------------------------------------------------- UI: toasts
   toast(e) {
@@ -266,6 +279,14 @@ class App {
     document.addEventListener('visibilitychange', () => { if (document.hidden) { this.autosave(true); } });
   }
   bindCanvas() {
+    if (this.renderer.is3D) {
+      const c = this.canvas, pointers = new Set(); let tap = null;
+      c.addEventListener('pointerdown', e => { pointers.add(e.pointerId); tap = pointers.size === 1 ? { id:e.pointerId, x:e.clientX, y:e.clientY, t:performance.now() } : null; });
+      c.addEventListener('pointermove', e => { if(tap && Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>7) tap=null; });
+      c.addEventListener('pointerup', e => { if(tap && tap.id===e.pointerId && performance.now()-tap.t<500) { const r=c.getBoundingClientRect(); this.select(this.renderer.hitTest(e.clientX-r.left,e.clientY-r.top,this.viewYear)); } pointers.delete(e.pointerId); tap=null; });
+      c.addEventListener('pointercancel', e => { pointers.delete(e.pointerId); tap=null; });
+      return;
+    }
     const c = this.canvas; const pts = new Map(); let tapStart = null; let lastPinch = null; let moved = false;
     c.addEventListener('pointerdown', (e) => { c.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); if (pts.size === 1) { tapStart = { x: e.clientX, y: e.clientY, t: performance.now() }; moved = false; } lastPinch = null; });
     c.addEventListener('pointermove', (e) => {

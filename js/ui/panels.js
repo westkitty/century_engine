@@ -273,3 +273,16 @@ export function menuPanel(app, savedInfo) {
   <p>Layers: districts · political control · culture · sentiment · wealth · ecology.</p>
   <p class="sub">Everything runs locally in your browser and autosaves. Saves store only the seed and your decisions — history is replayed deterministically.</p>`;
 }
+
+// Units are illustrative, deterministic render details — not simulated individuals.
+export function unitPanel(app, unit) {
+  if (!unit) return '';
+  const w = app.world, year = Math.min(app.viewYear, unit.year ?? app.viewYear);
+  const cohort = unit.cohort;
+  const events = w.events.filter(e => e.year <= year && e.year >= (cohort?.born ?? year - 20) && e.severity >= 2).slice(-4);
+  const building = id => { const s = w.structures.find(s => s.id === id); return s ? `<span class="link" data-act="structure" data-id="${s.id}">${esc(STRUCT[structAt(s, year).type].label)} #${s.id}</span>` : 'Shared habitat'; };
+  return `${closeBtn()}<h2>${esc(unit.name || unit.type)}</h2><p class="sub">${esc(unit.type)} · illustrative activity, not an individually simulated person</p>
+    ${unit.district !== undefined ? `<p>${districtLink(w, unit.district, app.snap)}</p>` : ''}
+    ${cohort ? `<p>Generation: ${esc(cohort.name)} · born Y${cohort.born}</p><p>Home: ${building(unit.home)}<br>Workplace: ${building(unit.work)}</p><h3>Events during this cohort’s lifetime</h3><ul class="evlist">${events.map(e => `<li>${eventLink(w, e.id)}</li>`).join('') || '<li class="sub">The founding years.</li>'}</ul>` : ''}
+    ${unit.event !== undefined ? `<p>${eventLink(w, unit.event)}</p>` : ''}`;
+}

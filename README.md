@@ -69,3 +69,44 @@ protests, revolts, district splits along barricade lines, revolutions · emergen
 (rationing boards that outlive the shortage, faith movements that consecrate dead
 infrastructure, separatists, migrant associations) · generational cohorts that remember,
 retell, forget and reinterpret.
+
+## 3D presentation
+
+WebGL2 browsers use the vendored **Three.js 0.169.0** cutaway renderer;
+unsupported browsers retain the original 2D canvas renderer. There is **no build
+step or runtime CDN dependency**. `vendor/three.module.js` and
+`vendor/OrbitControls.js` are unmodified files from the `three@0.169.0` npm package;
+the upstream MIT license is in `vendor/LICENSE`. The import map is relative to
+`index.html`, including when served under the GitHub Pages repository path.
+
+Drag to orbit, pinch/wheel to zoom, and tap to inspect. Fit resets the view;
+portrait puts the cylinder upright. Layer colours match the 2D renderer.
+Archaeology exposes translucent buildings, wireframes of earlier incarnations,
+and dashed historical boundaries. PNG exports include the district labels.
+Citizens, protesters, service vehicles and migration ships are **illustrative
+render-only units**, deterministically generated from the selected year, not
+additional simulation agents. Unit sheets explicitly identify this distinction.
+Reduced-motion preferences stop sprite and end-cap animation.
+
+The service worker caches both renderers and vendored modules for offline use
+after the first successful online load. An existing tab may need a reload after
+its service worker updates.
+
+### Browser regression checks
+
+The application itself needs no npm install. For development tests only:
+
+```sh
+npm ci
+npx playwright install --with-deps chromium
+python3 -m http.server 8000 --bind 0.0.0.0
+# in another terminal:
+npm test
+# optionally test the deployment:
+URL=https://westkitty.github.io/century_engine/ npm test
+```
+
+`CHROMIUM_PATH` can select an existing Chromium executable. Tests cover WebGL
+startup, all six layers, rendering purity, PNG export, 100 years of history,
+Archaeology, rewind, phone-sized unit taps, offline reload, and forced 2D fallback.
+Browser viewport tests do not establish performance on physical mobile hardware.
