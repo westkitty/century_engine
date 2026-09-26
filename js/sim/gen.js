@@ -125,7 +125,8 @@ export function generateWorld(seed) {
   let remaining = w.plots.length - seeds.length;
   let guard = 0;
   while (remaining > 0 && guard++ < 20000) {
-    const di = rng.weighted(w.districts.map(d => d.id), id => appetite[id] * Math.max(1, frontier[id].length));
+    const cap = Math.ceil(w.plots.length / nDist * 1.7);
+    const di = rng.weighted(w.districts.map(d => d.id), id => (w.districts[id].plots.length >= cap ? 0.02 : 1) * appetite[id] * Math.max(1, frontier[id].length));
     const fr = frontier[di];
     if (!fr.length) { if (frontier.every(f => !f.length)) break; continue; }
     const from = rng.pick(fr);

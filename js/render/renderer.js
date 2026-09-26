@@ -33,7 +33,8 @@ export class Renderer {
     const rng = new RNG('stars:' + w.seed);
     this.stars = Array.from({ length: 260 }, () => ({ x: rng.next(), y: rng.next(), b: rng.float(0.2, 1), r: rng.float(0.4, 1.4) }));
     // foreshortened vertices: rows near the top/bottom curve away from the viewer
-    this.tverts = w.verts.map(([x, y]) => [x, WORLD_H / 2 - (WORLD_H / 2) * Math.cos(Math.PI * y / WORLD_H)]);
+    const K = 0.45; // blend between flat and curved projection
+    this.tverts = w.verts.map(([x, y]) => [x, (1 - K) * y + K * (WORLD_H / 2 - (WORLD_H / 2) * Math.cos(Math.PI * y / WORLD_H))]);
     this.polys = w.plots.map(p => p.v.map(i => this.tverts[i]));
     this.slotPos = w.plots.map(p => {
       const [a, b, c, d] = p.v.map(i => this.tverts[i]);
@@ -195,7 +196,7 @@ export class Renderer {
     // curvature shading: rows further from the middle fall into shadow
     ctx.save();
     const g = ctx.createLinearGradient(0, 0, 0, WORLD_H);
-    g.addColorStop(0, 'rgba(0,0,0,0.55)'); g.addColorStop(0.25, 'rgba(0,0,0,0.05)'); g.addColorStop(0.5, 'rgba(255,240,200,0.05)'); g.addColorStop(0.75, 'rgba(0,0,0,0.05)'); g.addColorStop(1, 'rgba(0,0,0,0.55)');
+    g.addColorStop(0, 'rgba(0,0,0,0.42)'); g.addColorStop(0.25, 'rgba(0,0,0,0.05)'); g.addColorStop(0.5, 'rgba(255,240,200,0.05)'); g.addColorStop(0.75, 'rgba(0,0,0,0.05)'); g.addColorStop(1, 'rgba(0,0,0,0.42)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, WORLD_W, WORLD_H);
     // day/night terminator drifting with the rotation
     const ty = ((t * 9) % (WORLD_H * 1.8)) - WORLD_H * 0.4;
