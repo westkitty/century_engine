@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05060c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>The Century Engine</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.webmanifest">
+</head>
+<body>
+<canvas id="world"></canvas>
+
+<header id="topbar">
+  <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
+  <div id="title"><span id="habName">The Century Engine</span><span id="branchName" class="chip"></span></div>
+  <div id="clock"><span id="yearLabel">Year 1</span><button id="popBtn" class="linklike"><span id="popLabel">—</span></button></div>
+</header>
+
+<div id="toasts"></div>
+
+<nav id="sidebar">
+  <button id="archBtn" class="tool" aria-label="Archaeology overlay"><span class="g">⌬</span><span class="t">Archaeology</span></button>
+  <button id="layerBtn" class="tool" aria-label="Map layer"><span class="g">◧</span><span class="t" id="layerLabel">Districts</span></button>
+  <button id="branchBtn" class="tool" aria-label="Timelines"><span class="g">⑂</span><span class="t">Timelines</span></button>
+  <button id="fitBtn" class="tool" aria-label="Fit view"><span class="g">⤢</span><span class="t">Fit</span></button>
+</nav>
+
+<div id="scrubWrap">
+  <div id="viewingPast" class="hidden">Viewing Year <b id="viewYearLabel"></b> · <button id="jumpPresent" class="linklike">back to present</button></div>
+  <canvas id="scrub"></canvas>
+  <div id="controls">
+    <button id="playBtn" class="ctl big" aria-label="Play">▶</button>
+    <div id="speeds">
+      <button class="ctl spd" data-s="1">1×</button>
+      <button class="ctl spd" data-s="3">3×</button>
+      <button class="ctl spd" data-s="10">10×</button>
+      <button class="ctl spd" data-s="30">30×</button>
+    </div>
+    <button id="forkBtn" class="ctl accent">⑂ Fork</button>
+  </div>
+</div>
+
+<section id="sheet" class="hidden">
+  <div id="sheetHandle"><span></span></div>
+  <div id="sheetBody"></div>
+</section>
+
+<div id="overlay" class="hidden"><div id="overlayBox"><div class="spinner"></div><div id="overlayText">Replaying history…</div></div></div>
+
+<input type="file" id="importFile" accept="application/json,.json" hidden>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
